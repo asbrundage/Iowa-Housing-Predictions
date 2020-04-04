@@ -1,0 +1,94 @@
+---
+title: "Home Prices"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## setup
+
+```{r cars}
+library(tidyverse)
+library(forecast)
+library(lubridate)
+library(recipes)
+library(corrplot)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+train <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/house-prices-advanced-regression-techniques/train.csv", stringsAsFactors = FALSE)
+
+test <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/house-prices-advanced-regression-techniques/test.csv", stringsAsFactors = FALSE)
+
+```
+
+##Transform
+
+```{r}
+trainv2 <-
+  train %>% 
+  select(Id,SalePrice,LotArea,Neighborhood,Utilities,LotConfig,HouseStyle,BldgType,OverallQual,OverallCond,YearBuilt,YearRemodAdd,BsmtFinType1,BsmtFinType2,BsmtFinSF1,BsmtFinSF2,BsmtUnfSF,TotalBsmtSF) %>% 
+  mutate(age = 2020 - YearBuilt) %>% 
+  mutate_at(vars(BsmtFinType2,BsmtFinType1), ~replace_na(., 0))
+  # mutate(age = as.numeric(year(date()))-as.numeric(YearBuilt))
+
+# Create model recipe
+recipe1 <-
+  recipe(SalePrice ~ ., data = trainv2)
+
+recipe1steps <-
+  recipe1 %>% 
+  step_dummy(Neighborhood,Utilities,LotConfig,HouseStyle,BldgType,BsmtFinType1,BsmtFinType2) 
+
+preppedrecipe1 <- prep(recipe1steps, training = trainv2)
+
+trainbaked1 <-
+  bake(preppedrecipe1,trainv2)
+
+
+
+```
+
+##EDA
+
+```{r}
+Saleshist<-
+  trainv2 %>% 
+  ggplot(aes(x = SalePrice)) +
+  geom_histogram()
+Saleshist
+
+bldgtypebox <-
+  trainv2 %>% 
+  ggplot(aes(x = BldgType, y = SalePrice)) +
+  geom_boxplot()
+
+bldgtypebox
+
+bsmttypebox <-
+  trainv2 %>% 
+  ggplot(aes(x = BldgType, y = SalePrice)) +
+  geom_boxplot()
+
+
+correlation <-
+  trainbaked1 
+ 
+M <- 
+  cor(correlation)
+# png(file="corr.png", res=300, width=4500, height=4500)
+corrplot(M, method = "shade", number.cex = 1, tl.cex = 0.7, title = "Home Prices", mar=c(0,0,1,0))
+
+```
+
+
+```{r}
+
+```
+
