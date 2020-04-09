@@ -15,6 +15,9 @@ library(forecast)
 library(lubridate)
 library(recipes)
 library(corrplot)
+library(scales)
+library(ranger)
+library(randomForest)
 ```
 
 ## Including Plots
@@ -24,7 +27,7 @@ You can also embed plots, for example:
 ```{r}
 train <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/house-prices-advanced-regression-techniques/train.csv", stringsAsFactors = FALSE)
 
-test <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/house-prices-advanced-regression-techniques/test.csv", stringsAsFactors = FALSE)
+test <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/house-prices-advanced-regression-techniques/train.csv", stringsAsFactors = FALSE)
 
 ```
 
@@ -60,8 +63,10 @@ trainbaked1 <-
 ```{r}
 Saleshist<-
   trainv2 %>% 
-  ggplot(aes(x = SalePrice)) +
-  geom_histogram()
+  ggplot(aes(x = SalePrice, fill = Neighborhood)) +
+  geom_histogram() +
+  scale_x_continuous(labels = comma) +
+  facet_wrap(~Neighborhood)
 Saleshist
 
 bldgtypebox <-
@@ -87,8 +92,19 @@ corrplot(M, method = "shade", number.cex = 1, tl.cex = 0.7, title = "Home Prices
 
 ```
 
+#Random Forest
 
 ```{r}
+features <- setdiff(names(trainv2), "SalePrice")
+
+model1<- ranger(
+  formula   = SalePrice ~ ., 
+    data      = trainv2, 
+    num.trees = 500,
+    mtry      = floor(length(features) / 3)
+)
+
+print(model1)
 
 ```
 
