@@ -95,11 +95,11 @@ corrplot(M, method = "shade", number.cex = 1, tl.cex = 0.7, title = "Home Prices
 #Random Forest
 
 ```{r}
-features <- setdiff(names(trainv2), "SalePrice")
+features <- setdiff(names(trainbaked1), "SalePrice")
 
 model1<- ranger(
   formula   = SalePrice ~ ., 
-    data      = trainv2, 
+    data      = trainbaked1, 
     num.trees = 500,
     mtry      = floor(length(features) / 3)
 )
