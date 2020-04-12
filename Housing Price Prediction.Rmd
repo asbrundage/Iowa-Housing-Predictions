@@ -18,6 +18,8 @@ library(corrplot)
 library(scales)
 library(ranger)
 library(randomForest)
+library(purrr)
+library(knitr)
 ```
 
 ## Including Plots
@@ -29,9 +31,47 @@ train <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Ana
 
 test <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/house-prices-advanced-regression-techniques/train.csv", stringsAsFactors = FALSE)
 
+fullset <- 
+  train %>% 
+  bind_rows(test) %>% 
+  rowid_to_column("ID") %>% 
+  select(-Id) %>% 
+  rename(Id = ID) %>% 
+  mutate_if(is.character,as.factor) 
+
+
+
 ```
 
-##Transform
+##Cleanup
+
+```{r}
+#Find NA Values
+navalues <- as.data.frame(map_df(fullset, function(x) sum(is.na(x)))) 
+
+#View Columns with NA Values
+NATable <-
+  navalues %>% 
+  pivot_longer(colnames(navalues), names_to = "ColName", values_to = "NA_Count") %>% 
+  filter(NA_Count > 0)
+NATable %>% 
+  kable()
+
+#Replace NA values for "None" for variables where NA actually means the house does not have the trait
+fullset <- 
+  train %>% 
+  bind_rows(test) %>% 
+  rowid_to_column("ID") %>% 
+  select(-Id) %>% 
+  rename(Id = ID) %>% 
+  mutate_at(vars(Alley,BsmtQual,BsmtCond,BsmtExposure,BsmtFinType1,BsmtFinType2,FireplaceQu,GarageType,GarageFinish,GarageQual,GarageCond,PoolQC,Fence), ~replace(., is.na(.), "None")) %>% 
+  mutate_if(is.character,as.factor) 
+
+
+```
+
+
+##Use Recipe to prepare data for model
 
 ```{r}
 trainv2 <-
@@ -92,7 +132,7 @@ corrplot(M, method = "shade", number.cex = 1, tl.cex = 0.7, title = "Home Prices
 
 ```
 
-#Random Forest
+#Ranger - Random Forest
 
 ```{r}
 features <- setdiff(names(trainbaked1), "SalePrice")
@@ -105,6 +145,65 @@ model1<- ranger(
 )
 
 print(model1)
+
+```
+
+##RandomForest Random Forest
+
+```{r}
+model2 <- randomForest(SalePrice ~ ., data = trainbaked1, proximity = TRUE)
+print(model2)
+
+predictedvalues <- as.data.frame(model2$predicted)
+
+
+oob.error.data <- data.frame(
+  Trees=rep(1:nrow(model2$err.rate), times=3),
+  Type=rep(c("OOB"), each=nrow(model2$err.rate)),
+  Error=c(model2$err.rate[,"OOB"]
+    # model2$err.rate[,"Healthy"], 
+    # model2$err.rate[,"Unhealthy"]
+    )
+  )
+
+ggplot(data=oob.error.data, aes(x=Trees, y=Error)) +
+  geom_line(aes(color=Type))
+
+
+
+
+```
+
+#Fullset Random Forest Imput Data
+
+```{r}
+
+
+data.imputed <- rfImpute(SalePrice ~ .,data = fullset, iter = 6)
+
+```
+
+#Random Forest FullSet
+
+```{r}
+
+model3 <- randomForest(SalePrice ~ ., data = data.imputed, proximity = TRUE)
+
+```
+
+
+
+```{r}
+print(model3)
+```
+
+
+```{r}
+navalues <- as.data.frame(map_df(fullset, function(x) sum(is.na(x)))) 
+
+write.csv(fullset, "C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/fullset.csv")
+write.csv(data.imputed, "C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/imputed.csv")
+write.csv(navalues, "C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/navalues.csv")
 
 ```
 
