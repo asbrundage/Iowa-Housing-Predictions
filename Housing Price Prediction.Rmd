@@ -20,13 +20,7 @@ library(ranger)
 library(randomForest)
 library(purrr)
 library(knitr)
-```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r}
 train <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/house-prices-advanced-regression-techniques/train.csv", stringsAsFactors = FALSE)
 
 test <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/house-prices-advanced-regression-techniques/train.csv", stringsAsFactors = FALSE)
@@ -36,8 +30,7 @@ fullset <-
   bind_rows(test) %>% 
   rowid_to_column("ID") %>% 
   select(-Id) %>% 
-  rename(Id = ID) %>% 
-  mutate_if(is.character,as.factor) 
+  rename(Id = ID)  
 
 
 
@@ -59,11 +52,7 @@ NATable %>%
 
 #Replace NA values for "None" for variables where NA actually means the house does not have the trait
 fullset <- 
-  train %>% 
-  bind_rows(test) %>% 
-  rowid_to_column("ID") %>% 
-  select(-Id) %>% 
-  rename(Id = ID) %>% 
+  fullset %>% 
   mutate_at(vars(Alley,BsmtQual,BsmtCond,BsmtExposure,BsmtFinType1,BsmtFinType2,FireplaceQu,GarageType,GarageFinish,GarageQual,GarageCond,PoolQC,Fence), ~replace(., is.na(.), "None")) %>% 
   mutate_if(is.character,as.factor) 
 
