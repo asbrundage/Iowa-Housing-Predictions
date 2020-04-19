@@ -20,6 +20,9 @@ library(ranger)
 library(randomForest)
 library(purrr)
 library(knitr)
+library(randomForestSRC)
+library(caret)
+library(rsample)
 
 train <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/house-prices-advanced-regression-techniques/train.csv", stringsAsFactors = FALSE)
 
@@ -40,23 +43,33 @@ fullset <-
 
 ```{r}
 #Find NA Values
-navalues <- as.data.frame(map_df(fullset, function(x) sum(is.na(x)))) 
-
-#View Columns with NA Values
-NATable <-
-  navalues %>% 
-  pivot_longer(colnames(navalues), names_to = "ColName", values_to = "NA_Count") %>% 
-  filter(NA_Count > 0)
-NATable %>% 
-  kable()
+# navalues <- as.data.frame(map_df(fullset, function(x) sum(is.na(x)))) 
+# 
+# #View Columns with NA Values
+# NATable <-
+#   navalues %>% 
+#   pivot_longer(colnames(navalues), names_to = "ColName", values_to = "NA_Count") %>% 
+#   filter(NA_Count > 0)
+# NATable %>% 
+#   kable()
 
 #Replace NA values for "None" for variables where NA actually means the house does not have the trait
 fullset <- 
   fullset %>% 
-  mutate_at(vars(Alley,BsmtQual,BsmtCond,BsmtExposure,BsmtFinType1,BsmtFinType2,FireplaceQu,GarageType,GarageFinish,GarageQual,GarageCond,PoolQC,Fence), ~replace(., is.na(.), "None")) %>% 
-  mutate_if(is.character,as.factor) 
+  mutate_at(vars(Alley,BsmtQual,BsmtCond,BsmtExposure,BsmtFinType1,BsmtFinType2,FireplaceQu,GarageType,GarageFinish,GarageQual,GarageCond,PoolQC,Fence,MasVnrType,MiscFeature), ~replace(., is.na(.), "None")) %>% 
+  mutate_at(vars(MasVnrArea), ~replace(MasVnrArea,is.na(.),0)) %>% 
+  mutate_at(vars(MasVnrArea),as.numeric) %>% 
+  mutate_at(vars(OverallQual,OverallCond),as.factor) %>% 
+  # select(-GarageYrBlt) %>% 
+  # mutate(GarageYrBlt2 = case_when(GarageYrBlt == NA ~ YearBuilt)) %>%
+  # mutate_at(vars(GarageYrBlt), ~replace_na(GarageYrBlt, YearBuilt)) %>% 
+  # select(-GarageYrBlt) %>% 
+  # rename(GarageYrBlt = GarageYrBlt2) %>% 
+  mutate_if(is.character,as.factor)
 
-
+  # mutate(LotFrontageNew = case_when(LotConfig == "Inside Lot" ~ mean()  ))
+#columns to impute: Electrical,LotFrontage
+# navalues2 <- as.data.frame(map_df(fullset, function(x) sum(is.na(x)))) 
 ```
 
 
@@ -85,7 +98,82 @@ trainbaked1 <-
 
 
 
+
 ```
+
+#Recipe for simpler model
+
+```{r}
+
+
+fullsetv2 <-
+  fullset %>% 
+  mutate(porchtype = case_when(WoodDeckSF > 0 ~ "wooddeck",
+                               OpenPorchSF > 0 ~ "openporch",
+                               EnclosedPorch > 0 ~ "enclosed",
+                               "3SsnPorch" > 0 ~ "threeseason",
+                               ScreenPorch > 0 ~ "screen"),
+         finishedbsmtsqft = TotalBsmtSF - BsmtUnfSF,
+         totalfullbaths = FullBath + BsmtFullBath) %>% 
+  select(Id,
+         SalePrice,
+         porchtype,
+         PavedDrive,
+         PoolArea,
+         KitchenQual,
+         MSZoning,
+         LotArea,
+         RoofStyle,
+         RoofMatl,
+         TotalBsmtSF,
+         finishedbsmtsqft,
+         BsmtFinType1,
+         BedroomAbvGr,
+         totalfullbaths,
+         Fireplaces,
+         FireplaceQu,
+         SaleCondition,
+         Neighborhood,
+         MSSubClass,
+         Utilities,
+         OverallQual,
+         OverallCond,
+         ExterQual,
+         ExterCond,
+         HeatingQC,
+         CentralAir
+         ) 
+
+
+
+
+recipe2 <- recipe(SalePrice ~ ., data = fullsetv2) 
+
+recipe2steps <-
+  recipe2 %>% 
+  step_dummy(all_nominal()) 
+
+preppedrecipe2 <- prep(recipe2steps, training = fullsetv2, strings_as_factors = TRUE)
+
+fullsetbaked <-
+  bake(preppedrecipe2,fullsetv2)
+
+#Split into train and test set 70/30 train/test to be used in linear regression model
+
+set.seed(343)
+
+splitdata <- 
+  fullsetv2 %>% 
+  initial_split(prop = 0.7)
+
+trainv2 <-
+  training(splitdata)
+testv2 <-
+  testing(splitdata)
+
+
+```
+
 
 ##EDA
 
@@ -119,21 +207,52 @@ M <-
 # png(file="corr.png", res=300, width=4500, height=4500)
 corrplot(M, method = "shade", number.cex = 1, tl.cex = 0.7, title = "Home Prices", mar=c(0,0,1,0))
 
+
+
+correlation2 <-
+  fullsetbaked 
+ 
+M2 <- 
+  cor(correlation2)
+# png(file="corr.png", res=300, width=4500, height=4500)
+png(file="C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/corr.png", res=300, width=4500, height=4500)
+corrplot(M2, method = "shade", number.cex = 0.5, tl.cex = 0.6, title = "Narrowed Correlation", mar=c(0,0,1,0))
+
+
+##Smaller Corerlation Matrix for Presentation. Include both Highly Positive and Highly Negative Correlations
+correlation3 <-
+  fullsetbaked %>% 
+  select(Total)
+
+
 ```
 
 #Ranger - Random Forest
 
 ```{r}
-features <- setdiff(names(trainbaked1), "SalePrice")
 
-model1<- ranger(
-  formula   = SalePrice ~ ., 
-    data      = trainbaked1, 
-    num.trees = 500,
+# fullset.imputed <- rfImpute(SalePrice ~ .,data = fullsetbaked, iter = 6)
+
+
+features <- setdiff(names(fullsetbaked), "SalePrice")
+
+model1<- ranger(formula   = SalePrice ~ .,
+    data      = fullsetbaked,
+    num.trees = 1000,
     mtry      = floor(length(features) / 3)
 )
 
+model4 <- rfsrc(SalePrice ~ ., data = as.data.frame(fullsetbaked), ntree=1000, samptype='swr')
+
+print(model4)
 print(model1)
+pred.RF <- predict(model4, fullsetbaked)
+pred.RF <- as.vector(pred.RF$predicted)
+accuracy(pred.RF, fullsetbaked$SalePrice)
+
+pred.RF2 <- predict(model1, fullsetbaked)
+pred.RF2 <- as.vector(pred.RF2$predicted)
+accuracy(pred.RF2, fullsetbaked$SalePrice)
 
 ```
 
