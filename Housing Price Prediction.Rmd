@@ -23,6 +23,8 @@ library(knitr)
 library(randomForestSRC)
 library(caret)
 library(rsample)
+library(ggthemes)
+library(tidymodels)
 
 train <- read.csv("C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/house-prices-advanced-regression-techniques/train.csv", stringsAsFactors = FALSE)
 
@@ -60,48 +62,13 @@ fullset <-
   mutate_at(vars(MasVnrArea), ~replace(MasVnrArea,is.na(.),0)) %>% 
   mutate_at(vars(MasVnrArea),as.numeric) %>% 
   mutate_at(vars(OverallQual,OverallCond),as.factor) %>% 
-  # select(-GarageYrBlt) %>% 
-  # mutate(GarageYrBlt2 = case_when(GarageYrBlt == NA ~ YearBuilt)) %>%
-  # mutate_at(vars(GarageYrBlt), ~replace_na(GarageYrBlt, YearBuilt)) %>% 
-  # select(-GarageYrBlt) %>% 
-  # rename(GarageYrBlt = GarageYrBlt2) %>% 
   mutate_if(is.character,as.factor)
 
-  # mutate(LotFrontageNew = case_when(LotConfig == "Inside Lot" ~ mean()  ))
-#columns to impute: Electrical,LotFrontage
-# navalues2 <- as.data.frame(map_df(fullset, function(x) sum(is.na(x)))) 
+  
 ```
 
 
-##Use Recipe to prepare data for model
-
-```{r}
-trainv2 <-
-  train %>% 
-  select(Id,SalePrice,LotArea,Neighborhood,Utilities,LotConfig,HouseStyle,BldgType,OverallQual,OverallCond,YearBuilt,YearRemodAdd,BsmtFinType1,BsmtFinType2,BsmtFinSF1,BsmtFinSF2,BsmtUnfSF,TotalBsmtSF) %>% 
-  mutate(age = 2020 - YearBuilt) %>% 
-  mutate_at(vars(BsmtFinType2,BsmtFinType1), ~replace_na(., 0))
-  # mutate(age = as.numeric(year(date()))-as.numeric(YearBuilt))
-
-# Create model recipe
-recipe1 <-
-  recipe(SalePrice ~ ., data = trainv2)
-
-recipe1steps <-
-  recipe1 %>% 
-  step_dummy(Neighborhood,Utilities,LotConfig,HouseStyle,BldgType,BsmtFinType1,BsmtFinType2) 
-
-preppedrecipe1 <- prep(recipe1steps, training = trainv2)
-
-trainbaked1 <-
-  bake(preppedrecipe1,trainv2)
-
-
-
-
-```
-
-#Recipe for simpler model
+#Recipe for model pre-processing
 
 ```{r}
 
@@ -133,16 +100,24 @@ fullsetv2 <-
          Fireplaces,
          FireplaceQu,
          SaleCondition,
-         Neighborhood,
+         # Neighborhood,
          MSSubClass,
-         Utilities,
+         # Utilities,
          OverallQual,
-         OverallCond,
+         # OverallCond,
          ExterQual,
          ExterCond,
          HeatingQC,
-         CentralAir
-         ) 
+         CentralAir,
+         HouseStyle,
+         BldgType,
+         GarageCars,
+         HouseStyle,
+         BldgType,
+         GarageCars
+      
+         ) %>% 
+  mutate_if(is.character,as.factor)
 
 
 
@@ -160,18 +135,20 @@ fullsetbaked <-
 
 #Split into train and test set 70/30 train/test to be used in linear regression model
 
-set.seed(343)
+set.seed(1)
 
 splitdata <- 
   fullsetv2 %>% 
   initial_split(prop = 0.7)
 
 trainv2 <-
-  training(splitdata)
+  training(splitdata) %>% 
+  mutate_if(is.factor,as.factor)
 testv2 <-
-  testing(splitdata)
+  testing(splitdata) %>% 
+  mutate_if(is.factor,as.factor)
 
-
+# navalues <- as.data.frame(map_df(fullsetv2, function(x) sum(is.na(x)))) 
 ```
 
 
@@ -215,19 +192,19 @@ correlation2 <-
 M2 <- 
   cor(correlation2)
 # png(file="corr.png", res=300, width=4500, height=4500)
-png(file="C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/corr.png", res=300, width=4500, height=4500)
+# png(file="C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/corr.png", res=300, width=4500, height=4500)
 corrplot(M2, method = "shade", number.cex = 0.5, tl.cex = 0.6, title = "Narrowed Correlation", mar=c(0,0,1,0))
 
 
 ##Smaller Corerlation Matrix for Presentation. Include both Highly Positive and Highly Negative Correlations
-correlation3 <-
-  fullsetbaked %>% 
-  select(Total)
+# correlation3 <-
+#   fullsetbaked %>% 
+#   select(Total)
 
 
 ```
 
-#Ranger - Random Forest
+##Package Select: Ranger - randomForest - randomForestSRC Runtime Comparison
 
 ```{r}
 
@@ -235,83 +212,160 @@ correlation3 <-
 
 
 features <- setdiff(names(fullsetbaked), "SalePrice")
-
-model1<- ranger(formula   = SalePrice ~ .,
+start.time = proc.time() 
+model_ranger<- ranger(formula   = SalePrice ~ .,
     data      = fullsetbaked,
     num.trees = 1000,
     mtry      = floor(length(features) / 3)
 )
+proc.time() - start.time
 
-model4 <- rfsrc(SalePrice ~ ., data = as.data.frame(fullsetbaked), ntree=1000, samptype='swr')
+start.time = proc.time() 
+model_rfsrc <- rfsrc(SalePrice ~ ., data = as.data.frame(fullsetbaked), ntree=1000, samptype='swr')
+proc.time() - start.time
 
-print(model4)
-print(model1)
-pred.RF <- predict(model4, fullsetbaked)
-pred.RF <- as.vector(pred.RF$predicted)
-accuracy(pred.RF, fullsetbaked$SalePrice)
+start.time = proc.time() 
+model_rf <- randomForest(formula = SalePrice ~ ., data = fullsetbaked)
+proc.time() - start.time
 
-pred.RF2 <- predict(model1, fullsetbaked)
-pred.RF2 <- as.vector(pred.RF2$predicted)
-accuracy(pred.RF2, fullsetbaked$SalePrice)
 
+print(model_ranger)
+print(model_rfsrc)
+print(model_rf)
+
+
+
+# pred.rfsrc <- predict(model_rfsrc, fullsetbaked)
+# pred.frsrc <- pred.rfsrc$predicted
+# accuracy(pred.rfsrc, fullsetbaked$SalePrice)
+# 
+# pred.rf <- predict(model_rf, fullsetbaked)
+# pred.fr <- as.vector(pred.rf$predicted)
+# accuracy(pred.rf, fullsetbaked$SalePrice)
+# 
+# pred.ranger <- predict(model_ranger, fullsetbaked)
+# pred.RF <- as.vector(pred.ranger$predicted)
+# accuracy(pred.ranger, fullsetbaked$SalePrice)
+# 
+# plot(model_rf)
+# plot(model_rfsrc)
+# plot(model_ranger)
 ```
 
-##RandomForest Random Forest
+
+#Error rate comparison
 
 ```{r}
-model2 <- randomForest(SalePrice ~ ., data = trainbaked1, proximity = TRUE)
-print(model2)
+x_test <- testv2[setdiff(names(testv2), "SalePrice")]
+y_test <- testv2$SalePrice
 
-predictedvalues <- as.data.frame(model2$predicted)
+set.seed(1)
+rf_oob_comp <- randomForest(
+  formula = SalePrice ~ .,
+  data    = trainv2,
+  xtest   = x_test,
+  ytest   = y_test,
+  keep.forest = TRUE
+)
+
+oob <- sqrt(rf_oob_comp$mse)
+validation <- sqrt(rf_oob_comp$test$mse)
+
+error_df <- data.frame(oob,validation)
+
+error_df <-
+  error_df %>% 
+  mutate(ntrees = 1:rf_oob_comp$ntree)
+
+# write.csv(error_df, file = "C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/errors.csv")
+
+errorline <- 
+  error_df %>% 
+  pivot_longer(cols = c(oob,validation),names_to = "Metric", values_to = "RMSE") %>% 
+  ggplot(aes(x = ntrees, y = RMSE, color = Metric)) +
+  geom_line() +
+  theme_wsj() +
+  theme(axis.title=element_text(size=12),plot.title = element_text(size = 12)) +
+  labs(x = "# of Trees", y = "RMSE") +
+  labs(title = "Random Forest Performance")
+errorline
 
 
-oob.error.data <- data.frame(
-  Trees=rep(1:nrow(model2$err.rate), times=3),
-  Type=rep(c("OOB"), each=nrow(model2$err.rate)),
-  Error=c(model2$err.rate[,"OOB"]
-    # model2$err.rate[,"Healthy"], 
-    # model2$err.rate[,"Unhealthy"]
-    )
-  )
-
-ggplot(data=oob.error.data, aes(x=Trees, y=Error)) +
-  geom_line(aes(color=Type))
+which.min(rf_oob_comp$mse)
+sqrt(rf_oob_comp$mse[which.min(rf_oob_comp$mse)])
 
 
+which.min(rf_oob_comp$test$mse)
+sqrt(rf_oob_comp$test$mse[which.min(rf_oob_comp$test$mse)])
 
+print(rf_oob_comp)
 
 ```
 
-#Fullset Random Forest Imput Data
+
+##Generate Linear Model for Comparison against Optimal RF
+
+```{r}
+# lapply(trainv2, levels)
+# trainv3 <-
+# trainv2 %>% 
+#   select(-Neighborhood,-Utilities)
+
+model_linear <- lm(SalePrice ~ .,data = trainv2)
+# summary(model_linear)
+
+pred.lm <- predict(model_linear, testv2)
+# pred.lm <- model_linear$
+forecast::accuracy(pred.lm, testv2$SalePrice)
+#######
+
+
+set.seed(1)
+
+rf_oob_comp2 <- randomForest(
+  formula = SalePrice ~ .,
+  data    = trainv2,
+  xtest   = x_test,
+  ytest   = y_test,
+  keep.forest = TRUE,
+  ntrees = 86
+)
+
+pred.rf3 <- predict(rf_oob_comp2, testv2)
+# pred.lm <- model_linear$
+forecast::accuracy(pred.rf3, testv2$SalePrice)
+```
+
+##Extract Examples for Presentation
 
 ```{r}
 
+Testv3 <-
+  testv2 %>% 
+  mutate(lmpredict = predict(model_linear, testv2),
+         rfpredict = predict(rf_oob_comp, testv2))
 
-data.imputed <- rfImpute(SalePrice ~ .,data = fullset, iter = 6)
+write.csv(Testv3, "C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/predictions.csv")
+head(Testv3)
 
 ```
 
-#Random Forest FullSet
+##Linear Regression Results and RF Variable Improtance
 
 ```{r}
+summary(model_linear) 
 
-model3 <- randomForest(SalePrice ~ ., data = data.imputed, proximity = TRUE)
-
+testimp <- 
+  as.data.frame(importance(rf_oob_comp)) %>% 
+  rownames_to_column() %>% 
+  ggplot(aes(x = IncNodePurity, y = reorder(rowname,IncNodePurity))) +
+  geom_col() +
+  theme_wsj() +
+  theme(axis.title=element_text(size=12),plot.title = element_text(size = 12)) +
+  labs(x = "Node Purity", y = "Variable Name") +
+  labs(title = "Random Forest Variable Importance")
+  # theme(axis.title = element_text(), axis.title.x = element_blank()) + ylab('Variable Name')
+testimp
 ```
 
-
-
-```{r}
-print(model3)
-```
-
-
-```{r}
-navalues <- as.data.frame(map_df(fullset, function(x) sum(is.na(x)))) 
-
-write.csv(fullset, "C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/fullset.csv")
-write.csv(data.imputed, "C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/imputed.csv")
-write.csv(navalues, "C:/Users/asbru/Documents/Emory/Forecasting and Predictive Analytics/Final/navalues.csv")
-
-```
 
